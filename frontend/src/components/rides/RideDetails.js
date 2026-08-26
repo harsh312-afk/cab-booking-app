@@ -2,14 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useToast } from './useToast'; // We'll create this hook or use a simple alternative
 
 const RideDetails = () => {
   const { user } = useAuth();
   const [ride, setRide] = useState(null);
   const [loading, setLoading] = useState(true);
   const { id } = useParams();
-  const navigate = useNavigate();
   const [toast, setToast] = useState(''); // Simple toast state
 
   useEffect(() => {

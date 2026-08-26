@@ -4,7 +4,6 @@ import api from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 
 const BookRide = () => {
-  const { user } = useAuth();
   const [pickup, setPickup] = useState({ lat: '', lng: '', address: '' });
   const [dropoff, setDropoff] = useState({ lat: '', lng: '', address: '' });
   const [error, setError] = useState('');
