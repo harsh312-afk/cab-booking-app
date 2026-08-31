@@ -1,0 +1,27 @@
+{
+  "name": "cab-booking-app",
+  "version": "2.0.0",
+  "description": "Production-grade Full-Stack Real-Time Cab Booking Platform with Leaflet Maps, Socket.IO, Driver Dashboards, OTP Verification, and Automated Tests.",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm start",
+    "dev": "npm run dev:backend",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start",
+    "test": "cd backend && npm test",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install"
+  },
+  "keywords": [
+    "cab-booking",
+    "uber-clone",
+    "socket.io",
+    "real-time",
+    "leaflet",
+    "maps",
+    "express",
+    "react",
+    "mongodb"
+  ],
+  "author": "CabPulse Team",
+  "license": "MIT"
+}

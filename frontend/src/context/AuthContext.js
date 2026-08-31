@@ -15,93 +15,78 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const token = localStorage.getItem('token');
     const userInfo = localStorage.getItem('user');
-    console.log('[AUTH] useEffect - token:', token ? 'YES' : 'NO');
-    console.log('[AUTH] useEffect - userInfo:', userInfo ? 'YES' : 'NO');
+
     if (token && userInfo) {
       try {
         const parsedUser = JSON.parse(userInfo);
-        console.log('[AUTH] useEffect - parsed user:', parsedUser);
         setUser(parsedUser);
-        console.log('[AUTH] useEffect - setUser called');
       } catch (e) {
-        console.log('[AUTH] useEffect - JSON parse error:', e);
-        // Clear invalid data
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setUser(null);
       }
     } else {
-      console.log('[AUTH] useEffect - no token or userInfo');
       setUser(null);
     }
     setLoading(false);
   }, []);
 
   const login = async (email, password) => {
-    console.log('[AUTH] login - START for:', email);
     try {
-      console.log('[AUTH] login - calling API');
       const res = await api.post('/auth/login', { email, password });
-      console.log('[AUTH] login - API response:', res.data);
       const { token, ...userData } = res.data;
-      console.log('[AUTH] login - token:', token ? 'YES' : 'NO');
-      console.log('[AUTH] login - userData:', userData);
-      
-      console.log('[AUTH] login - saving to localStorage');
+
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(userData));
-      
-      console.log('[AUTH] login - calling setUser');
       setUser(userData);
-      console.log('[AUTH] login - setUser called');
-      
-      console.log('[AUTH] login - SUCCESS');
-      return { success: true };
+
+      return { success: true, user: userData };
     } catch (err) {
-      console.log('[AUTH] login - ERROR:', err);
-      return { success: false, message: err.response?.data?.message || 'Login failed' };
+      return {
+        success: false,
+        message: err.response?.data?.message || 'Login failed. Please check your credentials.'
+      };
     }
   };
 
-  const register = async (name, email, password, phone, role = 'user') => {
-    console.log('[AUTH] register - START for:', email);
+  const register = async (userData) => {
     try {
-      console.log('[AUTH] register - calling API');
-      const res = await api.post('/auth/register', { name, email, password, phone, role });
-      console.log('[AUTH] register - API response:', res.data);
-      const { token, ...userData } = res.data;
-      console.log('[AUTH] register - token:', token ? 'YES' : 'NO');
-      console.log('[AUTH] register - userData:', userData);
-      
-      console.log('[AUTH] register - saving to localStorage');
+      const res = await api.post('/auth/register', userData);
+      const { token, ...registeredUser } = res.data;
+
       localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(userData));
-      
-      console.log('[AUTH] register - calling setUser');
-      setUser(userData);
-      console.log('[AUTH] register - setUser called');
-      
-      console.log('[AUTH] register - SUCCESS');
-      return { success: true };
+      localStorage.setItem('user', JSON.stringify(registeredUser));
+      setUser(registeredUser);
+
+      return { success: true, user: registeredUser };
     } catch (err) {
-      console.log('[AUTH] register - ERROR:', err);
-      return { success: false, message: err.response?.data?.message || 'Registration failed' };
+      return {
+        success: false,
+        message: err.response?.data?.message || 'Registration failed. Please try again.'
+      };
     }
   };
 
   const logout = () => {
-    console.log('[AUTH] logout - START');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
-    console.log('[AUTH] logout - END');
   };
 
   const updateUser = (updatedUser) => {
-    console.log('[AUTH] updateUser - START:', updatedUser);
     localStorage.setItem('user', JSON.stringify(updatedUser));
     setUser(updatedUser);
-    console.log('[AUTH] updateUser - END');
+  };
+
+  const toggleDriverAvailability = async (isAvailable) => {
+    try {
+      const res = await api.put('/auth/driver-status', { isAvailable });
+      const updated = { ...user, isAvailable: res.data.isAvailable };
+      updateUser(updated);
+      return { success: true, isAvailable: res.data.isAvailable };
+    } catch (err) {
+      return { success: false, message: 'Failed to update availability status' };
+    }
   };
 
   const value = {
@@ -110,16 +95,17 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     updateUser,
-    loading
+    toggleDriverAvailability,
+    loading,
+    isAuthenticated: !!user,
+    isDriver: user?.role === 'driver'
   };
-
-  if (loading) {
-    return <div>Loading...</div>;
-  }
 
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 };
+
+export default AuthContext;

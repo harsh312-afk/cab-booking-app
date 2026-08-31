@@ -8,7 +8,8 @@ const rideSchema = new mongoose.Schema({
   },
   driver: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'User',
+    default: null
   },
   pickup: {
     type: {
@@ -20,7 +21,10 @@ const rideSchema = new mongoose.Schema({
       type: [Number],
       required: true
     },
-    address: String
+    address: {
+      type: String,
+      default: 'Pickup Location'
+    }
   },
   dropoff: {
     type: {
@@ -32,7 +36,26 @@ const rideSchema = new mongoose.Schema({
       type: [Number],
       required: true
     },
-    address: String
+    address: {
+      type: String,
+      default: 'Dropoff Location'
+    }
+  },
+  driverLocation: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point'
+    },
+    coordinates: {
+      type: [Number],
+      default: [0, 0]
+    }
+  },
+  vehicleType: {
+    type: String,
+    enum: ['auto', 'economy', 'comfort', 'suv', 'premium'],
+    default: 'comfort'
   },
   status: {
     type: String,
@@ -40,19 +63,62 @@ const rideSchema = new mongoose.Schema({
     default: 'requested'
   },
   fare: {
-    type: Number
+    type: Number,
+    required: true
   },
   distance: {
-    type: Number
+    type: Number, // In kilometers
+    required: true
   },
-  createdAt: {
-    type: Date,
-    default: Date.now
+  estimatedDuration: {
+    type: Number, // In minutes
+    default: 15
   },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+  otpCode: {
+    type: String,
+    default: () => Math.floor(1000 + Math.random() * 9000).toString()
+  },
+  paymentMethod: {
+    type: String,
+    enum: ['cash', 'card', 'wallet', 'upi'],
+    default: 'card'
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'paid'],
+    default: 'pending'
+  },
+  cancellationReason: {
+    type: String,
+    default: ''
+  },
+  cancelledBy: {
+    type: String,
+    enum: ['user', 'driver', null],
+    default: null
+  },
+  rating: {
+    score: {
+      type: Number,
+      min: 1,
+      max: 5
+    },
+    comment: {
+      type: String,
+      default: ''
+    },
+    ratedAt: {
+      type: Date
+    }
+  },
+  startedAt: {
+    type: Date
+  },
+  completedAt: {
+    type: Date
   }
+}, {
+  timestamps: true
 });
 
 module.exports = mongoose.model('Ride', rideSchema);
