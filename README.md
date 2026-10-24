@@ -113,14 +113,21 @@ Open `http://localhost:3000` in your browser.
 
 ## 🧪 Automated Testing
 
-Run the full Jest test suite covering authentication, ride lifecycle state transitions, OTP validation, driver assignment, and authorization boundaries:
+Run the full end-to-end automated test suite across backend and frontend:
 
 ```bash
+# Run both backend and frontend test suites
 npm test
+
+# Run backend integration tests only
+npm run test:backend
+
+# Run frontend React component tests only
+npm run test:frontend
 ```
 
-**Test Coverage Summary:**
-- ✅ User & Driver registration with vehicle details
+**Test Coverage Summary (20 Automated Tests):**
+- ✅ User & Driver registration with vehicle details & password policy validation
 - ✅ Password hashing & pre-save hook integrity verification
 - ✅ Ride request creation with automatic Haversine distance & tiered fare calculation
 - ✅ Driver discovery and unassigned ride acceptance
@@ -128,6 +135,14 @@ npm test
 - ✅ 4-Digit OTP verification before starting ride
 - ✅ Post-ride driver ratings and feedback calculation
 - ✅ Role-based access control and unauthorized route protection
+- ✅ Privacy protection: Rider phone number hidden from available requests list prior to acceptance
+- ✅ Security sanitization: OTP PIN hidden from drivers & public broadcasts (rider only)
+- ✅ Anti-brute force: Driver OTP verification lockout after 5 failed attempts
+- ✅ Concurrency protection: Atomic prevention of double-acceptance race conditions
+- ✅ Unauthorized spoofing protection on live driver coordinates
+- ✅ Coordinate boundary validation (-90° to 90° latitude, -180° to 180° longitude)
+- ✅ Frontend App brand, landing hero, and authentication navigation rendering
+- ✅ Frontend Login and Register role toggles and interactive demo credential buttons
 
 ---
 

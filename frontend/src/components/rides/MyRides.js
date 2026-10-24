@@ -297,11 +297,11 @@ const MyRides = () => {
               <div className="receipt-fare-table">
                 <div className="r-fare-row">
                   <span>Base Booking Fee</span>
-                  <span>$3.50</span>
+                  <span>${((selectedReceipt.vehicleType === 'auto' ? 2.5 : selectedReceipt.vehicleType === 'economy' ? 3.5 : selectedReceipt.vehicleType === 'suv' ? 7.5 : selectedReceipt.vehicleType === 'premium' ? 10.0 : 5.0)).toFixed(2)}</span>
                 </div>
                 <div className="r-fare-row">
                   <span>Distance Charge ({selectedReceipt.distance} km)</span>
-                  <span>${(selectedReceipt.fare - 3.50).toFixed(2)}</span>
+                  <span>${Math.max(0, selectedReceipt.fare - (selectedReceipt.vehicleType === 'auto' ? 2.5 : selectedReceipt.vehicleType === 'economy' ? 3.5 : selectedReceipt.vehicleType === 'suv' ? 7.5 : selectedReceipt.vehicleType === 'premium' ? 10.0 : 5.0)).toFixed(2)}</span>
                 </div>
                 <div className="r-fare-row">
                   <span>Taxes & Surcharge</span>

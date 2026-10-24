@@ -1,10 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize, JWT_SECRET } = require('../middleware/auth');
+const { rateLimit } = require('../middleware/rateLimiter');
 const User = require('../models/User');
 const Ride = require('../models/Ride');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+
+// Auth rate limiter: 20 requests per 15 minutes per IP
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: 'Too many authentication attempts. Please try again after 15 minutes.'
+});
 
 // Helper to generate JWT
 const generateToken = (id) => {
@@ -16,12 +24,21 @@ const generateToken = (id) => {
 // @desc    Register a new user or driver
 // @route   POST /api/auth/register
 // @access  Public
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   try {
     const { name, email, password, phone, role, vehicleModel, vehicleNumber, vehicleType } = req.body;
 
     if (!name || !email || !password || !phone) {
       return res.status(400).json({ message: 'Please provide name, email, password, and phone number' });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: 'Please provide a valid email address' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
     }
 
     // Check if user already exists
@@ -74,7 +91,7 @@ router.post('/register', async (req, res) => {
 // @desc    Authenticate user & get token
 // @route   POST /api/auth/login
 // @access  Public
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -161,6 +178,9 @@ router.put('/profile', protect, async (req, res) => {
 
     // If updating password, assign plain password and pre('save') hashes it once
     if (req.body.password && req.body.password.trim() !== '') {
+      if (req.body.password.length < 6) {
+        return res.status(400).json({ message: 'New password must be at least 6 characters long' });
+      }
       user.password = req.body.password;
     }
 

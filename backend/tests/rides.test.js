@@ -231,4 +231,155 @@ describe('Ride Booking and Driver Workflow Tests', () => {
       .set('Authorization', `Bearer ${otherRiderToken}`);
     expect(forbiddenRes.status).toBe(403);
   });
+
+  it('should hide otpCode and phone from driver prior to acceptance for privacy & security', async () => {
+    // 1. Rider requests ride
+    const reqRes = await request(app)
+      .post('/api/rides/request')
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({
+        pickup: { coordinates: [77.5946, 12.9716], address: 'Location A' },
+        dropoff: { coordinates: [77.6387, 12.9352], address: 'Location B' },
+        vehicleType: 'comfort'
+      });
+    const rideId = reqRes.body._id;
+    expect(reqRes.body.otpCode).toBeDefined();
+
+    // 2. Driver fetches available list - rider phone and OTP must be hidden
+    const availRes = await request(app)
+      .get('/api/rides/available')
+      .set('Authorization', `Bearer ${driverToken}`);
+    expect(availRes.status).toBe(200);
+    const rideInList = availRes.body.find((r) => r._id === rideId);
+    expect(rideInList).toBeDefined();
+    expect(rideInList.otpCode).toBeUndefined();
+    expect(rideInList.user.phone).toBeUndefined();
+
+    // 3. Driver queries single ride by ID before acceptance - otpCode must be hidden
+    const driverViewRes = await request(app)
+      .get(`/api/rides/${rideId}`)
+      .set('Authorization', `Bearer ${driverToken}`);
+    expect(driverViewRes.status).toBe(200);
+    expect(driverViewRes.body.otpCode).toBeUndefined();
+  });
+
+  it('should reject invalid or out-of-bounds coordinate values', async () => {
+    const invalidRes = await request(app)
+      .post('/api/rides/request')
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({
+        pickup: { coordinates: [77.59, 999.0] }, // Lat > 90
+        dropoff: { coordinates: [77.65, 12.99] }
+      });
+    expect(invalidRes.status).toBe(400);
+    expect(invalidRes.body.message).toContain('coordinate');
+  });
+
+  it('should lock out driver verification after 5 failed OTP attempts', async () => {
+    const reqRes = await request(app)
+      .post('/api/rides/request')
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({
+        pickup: { coordinates: [77.59, 12.97] },
+        dropoff: { coordinates: [77.65, 12.99] }
+      });
+    const rideId = reqRes.body._id;
+
+    // Accept ride
+    await request(app)
+      .patch(`/api/rides/${rideId}`)
+      .set('Authorization', `Bearer ${driverToken}`)
+      .send({ status: 'accepted' });
+
+    // Send 5 incorrect attempts
+    for (let i = 0; i < 5; i++) {
+      const failRes = await request(app)
+        .post(`/api/rides/${rideId}/verify-otp`)
+        .set('Authorization', `Bearer ${driverToken}`)
+        .send({ otp: '0000' });
+      expect(failRes.status).toBe(400);
+    }
+
+    // 6th attempt should be locked out (429)
+    const lockedRes = await request(app)
+      .post(`/api/rides/${rideId}/verify-otp`)
+      .set('Authorization', `Bearer ${driverToken}`)
+      .send({ otp: '0000' });
+    expect(lockedRes.status).toBe(429);
+    expect(lockedRes.body.message).toContain('Too many');
+  });
+
+  it('should block non-assigned drivers from updating ride location', async () => {
+    const reqRes = await request(app)
+      .post('/api/rides/request')
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({
+        pickup: { coordinates: [77.59, 12.97] },
+        dropoff: { coordinates: [77.65, 12.99] }
+      });
+    const rideId = reqRes.body._id;
+
+    // Driver 2 registers
+    const driver2Res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'Dave Driver',
+        email: 'dave@driver.com',
+        password: 'password123',
+        phone: '+1-555-0404',
+        role: 'driver'
+      });
+    const driver2Token = driver2Res.body.token;
+
+    // Bob accepts ride
+    await request(app)
+      .patch(`/api/rides/${rideId}`)
+      .set('Authorization', `Bearer ${driverToken}`)
+      .send({ status: 'accepted' });
+
+    // Dave tries to update Bob's ride location
+    const spoofRes = await request(app)
+      .post(`/api/rides/${rideId}/location`)
+      .set('Authorization', `Bearer ${driver2Token}`)
+      .send({ coordinates: [77.60, 12.98] });
+    expect(spoofRes.status).toBe(403);
+  });
+
+  it('should prevent race conditions on simultaneous acceptance of requested ride', async () => {
+    const reqRes = await request(app)
+      .post('/api/rides/request')
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({
+        pickup: { coordinates: [77.59, 12.97] },
+        dropoff: { coordinates: [77.65, 12.99] }
+      });
+    const rideId = reqRes.body._id;
+
+    // Driver 2 registers
+    const driver2Res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'Eva Driver',
+        email: 'eva@driver.com',
+        password: 'password123',
+        phone: '+1-555-0505',
+        role: 'driver'
+      });
+    const driver2Token = driver2Res.body.token;
+
+    // Driver 1 accepts
+    const firstAccept = await request(app)
+      .patch(`/api/rides/${rideId}`)
+      .set('Authorization', `Bearer ${driverToken}`)
+      .send({ status: 'accepted' });
+    expect(firstAccept.status).toBe(200);
+
+    // Driver 2 attempts to accept already accepted ride
+    const secondAccept = await request(app)
+      .patch(`/api/rides/${rideId}`)
+      .set('Authorization', `Bearer ${driver2Token}`)
+      .send({ status: 'accepted' });
+    expect(secondAccept.status).toBe(400);
+    expect(secondAccept.body.message).toContain('already been accepted');
+  });
 });

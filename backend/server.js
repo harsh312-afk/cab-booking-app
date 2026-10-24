@@ -29,7 +29,9 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_location_update', ({ rideId, coordinates }) => {
-    io.to(`ride_${rideId}`).emit(`driver_location_${rideId}`, { coordinates });
+    if (rideId && Array.isArray(coordinates) && coordinates.length >= 2) {
+      io.to(`ride_${rideId}`).emit(`driver_location_${rideId}`, { coordinates });
+    }
   });
 
   socket.on('disconnect', () => {});

@@ -4,6 +4,17 @@ const { protect, authorize } = require('../middleware/auth');
 const Ride = require('../models/Ride');
 const User = require('../models/User');
 
+// Helper to sanitize ride documents (hide security OTP from drivers / public broadcasts)
+const sanitizeRideForUser = (rideDoc, reqUserId) => {
+  if (!rideDoc) return null;
+  const obj = rideDoc.toObject ? rideDoc.toObject() : JSON.parse(JSON.stringify(rideDoc));
+  const riderId = obj.user?._id ? obj.user._id.toString() : obj.user?.toString();
+  if (!reqUserId || riderId !== reqUserId.toString()) {
+    delete obj.otpCode;
+  }
+  return obj;
+};
+
 // Distance calculation using Haversine formula (km)
 const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
   const R = 6371; // Earth radius in km
@@ -57,8 +68,12 @@ router.post('/request', protect, async (req, res) => {
     const dropoffLng = parseFloat(dropoff.coordinates[0]);
     const dropoffLat = parseFloat(dropoff.coordinates[1]);
 
-    if (isNaN(pickupLng) || isNaN(pickupLat) || isNaN(dropoffLng) || isNaN(dropoffLat)) {
-      return res.status(400).json({ message: 'Invalid coordinate values' });
+    if (
+      isNaN(pickupLng) || isNaN(pickupLat) || isNaN(dropoffLng) || isNaN(dropoffLat) ||
+      pickupLat < -90 || pickupLat > 90 || dropoffLat < -90 || dropoffLat > 90 ||
+      pickupLng < -180 || pickupLng > 180 || dropoffLng < -180 || dropoffLng > 180
+    ) {
+      return res.status(400).json({ message: 'Invalid coordinate values. Latitude must be between -90 and 90, Longitude between -180 and 180.' });
     }
 
     const distance = calculateDistanceKm(pickupLat, pickupLng, dropoffLat, dropoffLng);
@@ -92,10 +107,15 @@ router.post('/request', protect, async (req, res) => {
 
     const populatedRide = await Ride.findById(ride._id).populate('user', 'name phone email');
 
-    // Notify connected drivers in real-time
+    // Notify connected drivers in real-time (hide private phone & OTP from driver alert)
     const io = req.app.get('io');
     if (io) {
-      io.emit('new_ride_alert', populatedRide);
+      const driverAlertRide = sanitizeRideForUser(populatedRide, 'driver_broadcast');
+      if (driverAlertRide.user) {
+        delete driverAlertRide.user.phone;
+        delete driverAlertRide.user.email;
+      }
+      io.emit('new_ride_alert', driverAlertRide);
     }
 
     res.status(201).json(populatedRide);
@@ -114,7 +134,8 @@ router.get('/available', protect, authorize('driver'), async (req, res) => {
       status: 'requested',
       driver: null
     })
-      .populate('user', 'name phone')
+      .select('-otpCode')
+      .populate('user', 'name') // Privacy: rider phone hidden until accepted
       .sort({ createdAt: -1 });
 
     res.json(rides);
@@ -150,7 +171,8 @@ router.get('/', protect, async (req, res) => {
       .populate('driver', 'name phone vehicleModel vehicleNumber vehicleType driverRating')
       .sort({ createdAt: -1 });
 
-    res.json(rides);
+    const sanitizedRides = rides.map((r) => sanitizeRideForUser(r, req.user._id));
+    res.json(sanitizedRides);
   } catch (error) {
     console.error('Fetch rides error:', error);
     res.status(500).json({ message: 'Server error retrieving rides' });
@@ -178,7 +200,7 @@ router.get('/:id', protect, async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to access this ride' });
     }
 
-    res.json(ride);
+    res.json(sanitizeRideForUser(ride, req.user._id));
   } catch (error) {
     console.error('Single ride fetch error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -190,15 +212,7 @@ router.get('/:id', protect, async (req, res) => {
 // @access  Private
 router.patch('/:id', protect, async (req, res) => {
   try {
-    const ride = await Ride.findById(req.params.id);
-
-    if (!ride) {
-      return res.status(404).json({ message: 'Ride not found' });
-    }
-
-    const { status, cancellationReason, fare, distance } = req.body;
-    const isUser = ride.user.toString() === req.user._id.toString();
-    const isAssignedDriver = ride.driver && ride.driver.toString() === req.user._id.toString();
+    const { status, cancellationReason } = req.body;
     const isDriverUser = req.user.role === 'driver';
 
     // State transition validations
@@ -206,16 +220,56 @@ router.patch('/:id', protect, async (req, res) => {
       if (!isDriverUser) {
         return res.status(403).json({ message: 'Only registered drivers can accept rides' });
       }
-      if (ride.status !== 'requested') {
-        return res.status(400).json({ message: `Ride cannot be accepted because it is currently ${ride.status}` });
+
+      const existingRide = await Ride.findOne({ _id: req.params.id, status: 'requested' });
+      if (!existingRide) {
+        return res.status(400).json({ message: 'Ride is no longer available or has already been accepted' });
       }
-      ride.driver = req.user._id;
-      ride.status = 'accepted';
-      ride.driverLocation = {
+
+      const driverLocation = {
         type: 'Point',
-        coordinates: [ride.pickup.coordinates[0] - 0.008, ride.pickup.coordinates[1] - 0.008]
+        coordinates: [existingRide.pickup.coordinates[0] - 0.008, existingRide.pickup.coordinates[1] - 0.008]
       };
-    } else if (status === 'in_progress') {
+
+      // Atomic update to prevent race conditions when multiple drivers accept at the same time
+      const acceptedRide = await Ride.findOneAndUpdate(
+        { _id: req.params.id, status: 'requested' },
+        {
+          $set: {
+            driver: req.user._id,
+            status: 'accepted',
+            driverLocation
+          }
+        },
+        { returnDocument: 'after' }
+      );
+
+      if (!acceptedRide) {
+        return res.status(400).json({ message: 'Ride has already been accepted by another driver' });
+      }
+
+      const populated = await Ride.findById(acceptedRide._id)
+        .populate('user', 'name phone email')
+        .populate('driver', 'name phone vehicleModel vehicleNumber vehicleType driverRating');
+
+      const io = req.app.get('io');
+      if (io) {
+        io.emit(`ride_status_updated_${populated._id}`, sanitizeRideForUser(populated, populated.user._id));
+        io.emit('ride_updated', sanitizeRideForUser(populated, 'driver_broadcast'));
+      }
+
+      return res.json(sanitizeRideForUser(populated, req.user._id));
+    }
+
+    let ride = await Ride.findById(req.params.id);
+    if (!ride) {
+      return res.status(404).json({ message: 'Ride not found' });
+    }
+
+    const isUser = ride.user.toString() === req.user._id.toString();
+    const isAssignedDriver = ride.driver && ride.driver.toString() === req.user._id.toString();
+
+    if (status === 'in_progress') {
       if (!isAssignedDriver) {
         return res.status(403).json({ message: 'Only the assigned driver can start this ride' });
       }
@@ -256,11 +310,7 @@ router.patch('/:id', protect, async (req, res) => {
       ride.cancelledBy = isUser ? 'user' : 'driver';
     }
 
-    if (fare !== undefined) ride.fare = fare;
-    if (distance !== undefined) ride.distance = distance;
-
     const updatedRide = await ride.save();
-
     const populated = await Ride.findById(updatedRide._id)
       .populate('user', 'name phone email')
       .populate('driver', 'name phone vehicleModel vehicleNumber vehicleType driverRating');
@@ -268,11 +318,11 @@ router.patch('/:id', protect, async (req, res) => {
     // Emit live socket updates
     const io = req.app.get('io');
     if (io) {
-      io.emit(`ride_status_updated_${populated._id}`, populated);
-      io.emit('ride_updated', populated);
+      io.emit(`ride_status_updated_${populated._id}`, sanitizeRideForUser(populated, populated.user._id));
+      io.emit('ride_updated', sanitizeRideForUser(populated, 'driver_broadcast'));
     }
 
-    res.json(populated);
+    return res.json(sanitizeRideForUser(populated, req.user._id));
   } catch (error) {
     console.error('Ride status update error:', error);
     res.status(500).json({ message: error.message || 'Server error updating ride' });
@@ -299,12 +349,23 @@ router.post('/:id/verify-otp', protect, authorize('driver'), async (req, res) =>
       return res.status(400).json({ message: 'Ride must be in accepted status to verify OTP' });
     }
 
+    // Brute force protection: maximum 5 attempts
+    if ((ride.otpAttempts || 0) >= 5) {
+      return res.status(429).json({ message: 'Too many incorrect OTP attempts. For security reasons, please contact passenger.' });
+    }
+
     if (ride.otpCode !== otp?.trim()) {
-      return res.status(400).json({ message: 'Invalid OTP code. Please check with the passenger.' });
+      ride.otpAttempts = (ride.otpAttempts || 0) + 1;
+      await ride.save();
+      const remaining = 5 - ride.otpAttempts;
+      return res.status(400).json({
+        message: `Invalid OTP code. ${remaining > 0 ? `${remaining} attempts remaining.` : 'Account locked from further attempts.'}`
+      });
     }
 
     ride.status = 'in_progress';
     ride.startedAt = new Date();
+    ride.otpAttempts = 0;
     await ride.save();
 
     const populated = await Ride.findById(ride._id)
@@ -313,11 +374,11 @@ router.post('/:id/verify-otp', protect, authorize('driver'), async (req, res) =>
 
     const io = req.app.get('io');
     if (io) {
-      io.emit(`ride_status_updated_${populated._id}`, populated);
-      io.emit('ride_updated', populated);
+      io.emit(`ride_status_updated_${populated._id}`, sanitizeRideForUser(populated, populated.user._id));
+      io.emit('ride_updated', sanitizeRideForUser(populated, 'driver_broadcast'));
     }
 
-    res.json({ message: 'OTP verified successfully! Ride started.', ride: populated });
+    res.json({ message: 'OTP verified successfully! Ride started.', ride: sanitizeRideForUser(populated, req.user._id) });
   } catch (error) {
     console.error('OTP verify error:', error);
     res.status(500).json({ message: error.message || 'Server error verifying OTP' });
@@ -361,9 +422,10 @@ router.post('/:id/rate', protect, async (req, res) => {
     if (ride.driver) {
       const driver = await User.findById(ride.driver);
       if (driver) {
-        const currentTotal = (driver.driverRating || 5.0) * (driver.totalRatingsCount || 1);
-        const newCount = (driver.totalRatingsCount || 1) + 1;
-        const newAverage = (currentTotal + ratingScore) / newCount;
+        const currentCount = driver.totalRatingsCount || 0;
+        const currentTotal = (driver.driverRating || 5.0) * (currentCount > 0 ? currentCount : 1);
+        const newCount = currentCount + 1;
+        const newAverage = (currentTotal + ratingScore) / (currentCount > 0 ? newCount : 2);
         driver.driverRating = Math.round(newAverage * 10) / 10;
         driver.totalRatingsCount = newCount;
         await driver.save();
@@ -383,8 +445,13 @@ router.post('/:id/rate', protect, async (req, res) => {
 router.post('/:id/location', protect, authorize('driver'), async (req, res) => {
   try {
     const { coordinates } = req.body;
-    if (!coordinates || !Array.isArray(coordinates)) {
+    if (!coordinates || !Array.isArray(coordinates) || coordinates.length < 2) {
       return res.status(400).json({ message: 'Valid coordinates required' });
+    }
+
+    const [lng, lat] = coordinates.map(Number);
+    if (isNaN(lng) || isNaN(lat) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return res.status(400).json({ message: 'Invalid coordinate bounds' });
     }
 
     const ride = await Ride.findById(req.params.id);
@@ -392,18 +459,23 @@ router.post('/:id/location', protect, authorize('driver'), async (req, res) => {
       return res.status(404).json({ message: 'Ride not found' });
     }
 
+    // Only the assigned driver can update this ride's location
+    if (!ride.driver || ride.driver.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Only the assigned driver can update location for this ride' });
+    }
+
     ride.driverLocation = {
       type: 'Point',
-      coordinates
+      coordinates: [lng, lat]
     };
     await ride.save();
 
     const io = req.app.get('io');
     if (io) {
-      io.emit(`driver_location_${ride._id}`, { coordinates });
+      io.emit(`driver_location_${ride._id}`, { coordinates: [lng, lat] });
     }
 
-    res.json({ success: true, coordinates });
+    res.json({ success: true, coordinates: [lng, lat] });
   } catch (error) {
     console.error('Ride location update error:', error);
     res.status(500).json({ message: 'Server error' });

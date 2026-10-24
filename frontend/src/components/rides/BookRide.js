@@ -158,6 +158,14 @@ const BookRide = () => {
 
       mapInstanceRef.current = map;
     }
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        markersRef.current = { pickup: null, dropoff: null, polyline: null };
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

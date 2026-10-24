@@ -16,7 +16,8 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true
+    required: true,
+    minlength: 6
   },
   role: {
     type: String,
@@ -80,6 +81,10 @@ const userSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// Performance indexes
+userSchema.index({ role: 1, isAvailable: 1 });
+userSchema.index({ 'currentLocation.coordinates': '2dsphere' });
 
 // Hash password before saving
 userSchema.pre('save', async function() {

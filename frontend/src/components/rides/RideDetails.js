@@ -162,6 +162,14 @@ const RideDetails = () => {
 
       mapInstanceRef.current = map;
     }
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        driverMarkerRef.current = null;
+      }
+    };
   }, [ride]);
 
   // Status Handlers
@@ -321,22 +329,16 @@ const RideDetails = () => {
             </div>
           </div>
 
-          {/* 4-Digit Security OTP Card */}
-          {ride.status === 'requested' || ride.status === 'accepted' ? (
+          {/* 4-Digit Security OTP Card - Exclusively for Passenger */}
+          {isRider && (ride.status === 'requested' || ride.status === 'accepted') && ride.otpCode ? (
             <div className="otp-security-card">
               <div className="otp-icon-wrap">
                 <KeyRound size={22} />
               </div>
               <div className="otp-content">
-                <span className="otp-label">
-                  {isDriver ? 'Passenger Start OTP Code' : 'Your 4-Digit Ride PIN'}
-                </span>
-                <div className="otp-pin-display">{ride.otpCode || '4829'}</div>
-                <p className="otp-hint">
-                  {isDriver
-                    ? 'Ask passenger for this code before starting ride.'
-                    : 'Share this PIN with your captain when you board.'}
-                </p>
+                <span className="otp-label">Your 4-Digit Ride PIN</span>
+                <div className="otp-pin-display">{ride.otpCode}</div>
+                <p className="otp-hint">Share this PIN with your captain when you board.</p>
               </div>
             </div>
           ) : null}
@@ -633,11 +635,11 @@ const RideDetails = () => {
               <div className="receipt-fare-table">
                 <div className="r-fare-row">
                   <span>Base Fare</span>
-                  <span>$3.50</span>
+                  <span>${((ride.vehicleType === 'auto' ? 2.5 : ride.vehicleType === 'economy' ? 3.5 : ride.vehicleType === 'suv' ? 7.5 : ride.vehicleType === 'premium' ? 10.0 : 5.0)).toFixed(2)}</span>
                 </div>
                 <div className="r-fare-row">
                   <span>Distance ({ride.distance} km)</span>
-                  <span>${(ride.fare - 3.50).toFixed(2)}</span>
+                  <span>${Math.max(0, ride.fare - (ride.vehicleType === 'auto' ? 2.5 : ride.vehicleType === 'economy' ? 3.5 : ride.vehicleType === 'suv' ? 7.5 : ride.vehicleType === 'premium' ? 10.0 : 5.0)).toFixed(2)}</span>
                 </div>
                 <div className="r-fare-row total-fare">
                   <strong>Total Paid</strong>

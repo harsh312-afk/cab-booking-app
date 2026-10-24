@@ -78,6 +78,10 @@ const rideSchema = new mongoose.Schema({
     type: String,
     default: () => Math.floor(1000 + Math.random() * 9000).toString()
   },
+  otpAttempts: {
+    type: Number,
+    default: 0
+  },
   paymentMethod: {
     type: String,
     enum: ['cash', 'card', 'wallet', 'upi'],
@@ -120,5 +124,12 @@ const rideSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// Query performance and geospatial indexes
+rideSchema.index({ user: 1, createdAt: -1 });
+rideSchema.index({ driver: 1, createdAt: -1 });
+rideSchema.index({ status: 1, createdAt: -1 });
+rideSchema.index({ 'pickup.coordinates': '2dsphere' });
+rideSchema.index({ 'driverLocation.coordinates': '2dsphere' });
 
 module.exports = mongoose.model('Ride', rideSchema);
