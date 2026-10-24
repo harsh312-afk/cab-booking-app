@@ -1,5 +1,10 @@
 # 🚖 CabPulse - Real-Time Cab Booking & Dispatch Platform
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-cab--booking--app--nine.vercel.app-2563eb?style=for-the-badge&logo=vercel&logoColor=white)](https://cab-booking-app-nine.vercel.app)
+[![Tests Passing](https://img.shields.io/badge/Tests-20%20Passed-10b981?style=for-the-badge&logo=jest&logoColor=white)](https://cab-booking-app-nine.vercel.app)
+
+> 🔗 **Live Web Application**: [https://cab-booking-app-nine.vercel.app](https://cab-booking-app-nine.vercel.app)
+
 A production-grade, full-stack real-time urban ride-hailing and fleet dispatch platform engineered with **React**, **Node.js/Express**, **Socket.IO**, **Leaflet Maps**, and **MongoDB**.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -7,7 +12,7 @@ A production-grade, full-stack real-time urban ride-hailing and fleet dispatch p
 ![Node](https://img.shields.io/badge/Backend-Node%20Express-green.svg)
 ![Socket.IO](https://img.shields.io/badge/RealTime-Socket.IO-black.svg)
 ![Leaflet](https://img.shields.io/badge/Maps-Leaflet%20OSM-brightgreen.svg)
-![Tests](https://img.shields.io/badge/Tests-Jest%20Passing-success.svg)
+![Tests](https://img.shields.io/badge/Tests-20%20Passing-success.svg)
 
 ---
 

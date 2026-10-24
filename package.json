@@ -2,6 +2,7 @@
   "name": "cab-booking-app",
   "version": "2.0.0",
   "description": "Production-grade Full-Stack Real-Time Cab Booking Platform with Leaflet Maps, Socket.IO, Driver Dashboards, OTP Verification, and Automated Tests.",
+  "homepage": "https://cab-booking-app-nine.vercel.app",
   "scripts": {
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm start",
