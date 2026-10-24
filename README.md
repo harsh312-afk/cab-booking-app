@@ -62,8 +62,7 @@ cab-booking-app/
 │   │   ├── App.css          # Glassmorphism & dark-mode styling system
 │   │   └── index.js
 │   └── package.json
-├── netlify.toml             # Netlify SPA redirect rules
-├── render.yaml              # Render deployment configuration
+├── netlify.toml             # SPA redirect configuration
 └── package.json             # Root runner scripts
 ```
 
@@ -182,20 +181,6 @@ npm run test:frontend
 | `new_ride_alert` | Server ➔ Drivers | Broadcast newly requested ride to all active captains |
 | `ride_status_updated_{id}` | Server ➔ Room | Notify rider/driver of status changes (`accepted`, `in_progress`, `completed`) |
 | `driver_location_{id}` | Server ➔ Room | Broadcast live latitude/longitude car movement |
-
----
-
-## 🚢 Deployment
-
-### Frontend (Netlify / Vercel)
-The repository includes `netlify.toml` pre-configured with SPA route redirection (`/*` ➔ `/index.html`) so refreshing deep routes never returns 404.
-
-```bash
-cd frontend && npm run build
-```
-
-### Backend (Render / Fly.io / Railway / Heroku)
-The repository includes `render.yaml` with pre-defined environment variables and database bindings.
 
 ---
 
