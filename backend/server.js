@@ -45,6 +45,42 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Automatic Demo Account Seeder
+const seedDemoUsers = async () => {
+  try {
+    const User = require('./models/User');
+    const existingRider = await User.findOne({ email: 'rider@example.com' });
+    if (!existingRider) {
+      await User.create({
+        name: 'Demo Rider',
+        email: 'rider@example.com',
+        password: 'password123',
+        phone: '+1-555-0100',
+        role: 'user'
+      });
+      console.log('Seeded Demo Rider: rider@example.com / password123');
+    }
+
+    const existingDriver = await User.findOne({ email: 'driver@example.com' });
+    if (!existingDriver) {
+      await User.create({
+        name: 'Demo Captain Bob',
+        email: 'driver@example.com',
+        password: 'password123',
+        phone: '+1-555-0200',
+        role: 'driver',
+        vehicleModel: 'Toyota Camry Hybrid',
+        vehicleNumber: 'KA-05-MJ-9999',
+        vehicleType: 'comfort',
+        isAvailable: true
+      });
+      console.log('Seeded Demo Driver: driver@example.com / password123');
+    }
+  } catch (err) {
+    console.warn('Notice: Demo account auto-seeding skipped:', err.message);
+  }
+};
+
 // Connect Database (with automatic in-memory fallback for local dev / tests)
 const connectDB = async () => {
   if (mongoose.connection.readyState !== 0) {
@@ -56,6 +92,7 @@ const connectDB = async () => {
       serverSelectionTimeoutMS: 2000
     });
     console.log('MongoDB connected successfully');
+    await seedDemoUsers();
   } catch (err) {
     console.log('Local MongoDB not available, falling back to In-Memory MongoDB Server for dev/test...');
     try {
@@ -64,6 +101,7 @@ const connectDB = async () => {
       const memUri = mongod.getUri();
       await mongoose.connect(memUri);
       console.log('Connected to In-Memory MongoDB at:', memUri);
+      await seedDemoUsers();
     } catch (memErr) {
       console.error('Failed to start MongoDB Memory Server:', memErr.message);
     }
